@@ -510,6 +510,53 @@ The user asked to repair things one by one and test after each. Order followed:
 
 ---
 
+## 2026-05-14 T+360m  v0.3 — top space reclaimed, dark mode, CLI toggle removed, GitHub push
+
+User's four asks from this session, repaired one at a time, each verified:
+
+### 1. Top-of-window blank space
+
+`TopBar` deleted entirely. Sidebar grew `.padding(.top, 32)` so the brand row clears the OS traffic lights. Status pill that used to live in TopBar moved into the sidebar endpoint card as a new `STATUS` row at the top. Content (eyebrow + display title) now sits ~40 pt closer to the top than v0.2.1. Captured in [[../05-Architecture/Top-Space-Removal]].
+
+### 2. Light / dark mode toggle
+
+`Theme.Palette` rewritten as dynamic colors (`NSColor` with a `dynamicProvider`). Every existing palette token now resolves differently per appearance. New `AppTheme` enum (`system` / `light` / `dark`) persisted via `@AppStorage("osmBroker.theme")`. Three-icon segmented switcher (half-moon / sun / crescent) at the bottom of the sidebar. ContentView reads the persisted choice and applies `preferredColorScheme`. Mid-implementation found a contrast bug: the endpoint card's value text used `Palette.surface` which flips dark in dark mode → text invisible. Fixed by switching those rows to `Palette.darkText` (always cream), since the card background is intentionally always-dark. See [[../05-Architecture/Dark-Mode]].
+
+### 3. CLI toggle audit
+
+Verified the per-CLI `ToggleSwitch` on the CLI tab *did* set `state.agentExposed[id]` and `currentCatalog()` *did* filter on it — but the card had zero visible feedback, and the Models tab already lets the user enable/disable per-model. Two doors to the same room. Removed the toggle from `CLICard` and `agentExposed` from `currentCatalog`'s filter. CLI tab is now purely informational; Models tab is the single control surface for what gets served. Audit and decision in [[../05-Architecture/CLI-Toggle-Audit]].
+
+### 4. GitHub repo
+
+Pushed to **https://github.com/junainfinity/osmBroker** (public). 85 files in initial commit (`59c892c`), including the full Obsidian vault under `docs/osmBroker/`. `.gitignore` excludes `.build/`, generated `osmBroker.app/`, `.DS_Store`, and Obsidian's workspace cache. README at the repo root summarises the four-tab layout, quick-start, architecture, and points readers at `docs/osmBroker/00-Index.md` for the full design trail. Setup details in [[../05-Architecture/GitHub-Repo-Setup]].
+
+### Sessions captured in obsidian
+
+Every architecture decision since the project started is in `docs/osmBroker/05-Architecture/`:
+
+- HTTP-Server, Adapter-Pattern, Process-Lifecycle, SSE-Normalization
+- Logo-Branding, Bundle-Resources-Gotcha
+- Model-Discovery, Claude-Model-Discovery, AppState-Discovered-Models
+- Tab-Structure-v2, Sidebar-Card-Redesign
+- Top-Bar-Tightening (v0.2.1), Top-Space-Removal (v0.2.2)
+- Dark-Mode, CLI-Toggle-Audit, GitHub-Repo-Setup (this session)
+
+Every task is in `docs/osmBroker/02-Tasks/`:
+- Phase-1-HTTP-Broker (done)
+- Phase-1.5-UX-Overhaul (done)
+
+Dev-Log + Test-Log carry the full chronological trail with reproducer commands for every test run.
+
+### What's NOT in v0.3 (tracked for future)
+
+- "Probe models" button on the Models tab that calls `claude -p --model <alias>` to surface the resolved real name (`claude-sonnet-4-6`, etc.). Costs API money so defer.
+- Capability badges parsed from `claude --help` / `codex features list` (PRD §3.2).
+- Continuous polling for process detection (PRD §3.1) — Rescan is manual only today.
+- Kimi / Gemini / Copilot adapters wired (registry knows them; broker doesn't route).
+- `.app` icon (currently macOS default — could ship `.icns` from `osm-mark-dark.png`).
+
+---
+
 ## Anchor template for future entries
 
 ```

@@ -2,6 +2,8 @@
 
 Live build notes, decisions, tasks, tests, and dev log for the osmBroker macOS app.
 
+**Repo:** https://github.com/junainfinity/osmBroker
+
 ## How to read this vault
 
 Start here, then follow the links. Notes are written **before** the work, then updated as it lands. The Dev Log is the running diary; the Test Log records every test run.
