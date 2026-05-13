@@ -1,0 +1,999 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>osmBroker macOS Prototype</title>
+  <style>
+    :root {
+      --bg: #f5f4ed;
+      --surface: #faf9f5;
+      --white: #ffffff;
+      --fg: #141413;
+      --muted: #5e5d59;
+      --stone: #87867f;
+      --border: #f0eee6;
+      --border-strong: #e8e6dc;
+      --accent: #c96442;
+      --accent-soft: #f2d8cc;
+      --dark: #30302e;
+      --silver: #b0aea5;
+      --green: #3f7b56;
+      --amber: #9f6b24;
+      --red: #b53333;
+      --ring: 0 0 0 1px #d1cfc5;
+      --shadow: 0 22px 70px rgba(20, 20, 19, 0.12);
+      --font-display: Georgia, "Iowan Old Style", "Times New Roman", serif;
+      --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      --font-mono: "SFMono-Regular", ui-monospace, Menlo, monospace;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 8% 10%, rgba(201, 100, 66, 0.08), transparent 28%),
+        linear-gradient(145deg, #f5f4ed 0%, #eeeade 100%);
+      color: var(--fg);
+      font: 15px/1.5 var(--font-body);
+    }
+
+    button, input { font: inherit; }
+
+    .stage {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 34px;
+    }
+
+    .app-window {
+      width: min(1240px, 100%);
+      height: min(820px, calc(100vh - 68px));
+      min-height: 700px;
+      display: grid;
+      grid-template-rows: 44px 1fr;
+      overflow: hidden;
+      border-radius: 22px;
+      background: var(--surface);
+      box-shadow: var(--shadow), var(--ring);
+    }
+
+    .titlebar {
+      display: grid;
+      grid-template-columns: 180px 1fr 280px;
+      align-items: center;
+      gap: 16px;
+      padding: 0 16px;
+      border-bottom: 1px solid var(--border-strong);
+      background: rgba(250, 249, 245, 0.84);
+      backdrop-filter: blur(20px);
+    }
+
+    .traffic { display: flex; gap: 8px; align-items: center; }
+    .dot { width: 12px; height: 12px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(20,20,19,.13); }
+    .dot.red { background: #ed6a5f; }
+    .dot.yellow { background: #f4bf4f; }
+    .dot.green { background: #61c554; }
+
+    .window-title {
+      text-align: center;
+      font-size: 13px;
+      color: var(--muted);
+      letter-spacing: 0.01em;
+    }
+
+    .global-status {
+      justify-self: end;
+      display: inline-flex;
+      gap: 8px;
+      align-items: center;
+      padding: 5px 9px;
+      border-radius: 999px;
+      background: var(--white);
+      box-shadow: 0 0 0 1px var(--border-strong);
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .pulse {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 0 4px rgba(63, 123, 86, .14);
+    }
+
+    .shell {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 228px 1fr;
+    }
+
+    .sidebar {
+      border-right: 1px solid var(--border-strong);
+      background: #efede3;
+      padding: 18px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .brand {
+      padding: 2px 8px 10px;
+    }
+
+    .brand h1 {
+      margin: 0;
+      font: 500 28px/1.05 var(--font-display);
+      letter-spacing: -0.025em;
+    }
+
+    .brand p {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .nav {
+      display: grid;
+      gap: 6px;
+    }
+
+    .nav button {
+      width: 100%;
+      display: grid;
+      grid-template-columns: 20px 1fr auto;
+      align-items: center;
+      gap: 10px;
+      border: 0;
+      border-radius: 10px;
+      padding: 9px 10px;
+      background: transparent;
+      color: var(--muted);
+      text-align: start;
+      cursor: pointer;
+    }
+
+    .nav button.active {
+      background: var(--surface);
+      color: var(--fg);
+      box-shadow: 0 0 0 1px var(--border-strong);
+    }
+
+    .nav .count {
+      font: 12px/1 var(--font-mono);
+      color: var(--stone);
+    }
+
+    .sidebar-card {
+      margin-top: auto;
+      padding: 14px;
+      border-radius: 16px;
+      background: var(--dark);
+      color: var(--surface);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.06);
+    }
+
+    .sidebar-card .label {
+      color: var(--silver);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .sidebar-card strong {
+      display: block;
+      margin-top: 8px;
+      font: 500 24px/1.1 var(--font-display);
+      letter-spacing: -0.02em;
+    }
+
+    .sidebar-card code {
+      display: block;
+      margin-top: 12px;
+      font: 12px/1.45 var(--font-mono);
+      color: #ede9db;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    main {
+      min-width: 0;
+      overflow: hidden;
+      background: var(--bg);
+    }
+
+    .pane {
+      display: none;
+      height: 100%;
+      overflow: auto;
+      padding: 28px;
+    }
+
+    .pane.active {
+      display: block;
+    }
+
+    .pane-head {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 24px;
+      align-items: end;
+      margin-bottom: 22px;
+    }
+
+    .eyebrow {
+      margin: 0 0 8px;
+      color: var(--accent);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+
+    h2 {
+      margin: 0;
+      font: 500 clamp(34px, 4vw, 52px)/1.04 var(--font-display);
+      letter-spacing: -0.03em;
+    }
+
+    .lede {
+      max-width: 62ch;
+      margin: 12px 0 0;
+      color: var(--muted);
+      font-size: 16px;
+      line-height: 1.6;
+    }
+
+    .toolbar {
+      display: inline-flex;
+      gap: 8px;
+      align-items: center;
+      padding: 6px;
+      border-radius: 14px;
+      background: var(--surface);
+      box-shadow: 0 0 0 1px var(--border-strong);
+    }
+
+    .toolbar button, .primary-btn, .secondary-btn {
+      border: 0;
+      border-radius: 10px;
+      padding: 9px 12px;
+      background: var(--white);
+      box-shadow: 0 0 0 1px var(--border-strong);
+      color: var(--fg);
+      cursor: pointer;
+    }
+
+    .primary-btn {
+      background: var(--accent);
+      color: var(--surface);
+      box-shadow: 0 0 0 1px var(--accent);
+    }
+
+    .secondary-btn {
+      background: #e8e6dc;
+      color: #4d4c48;
+    }
+
+    .content-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.28fr) minmax(320px, .72fr);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .stack { display: grid; gap: 14px; }
+
+    .card {
+      background: var(--surface);
+      border-radius: 16px;
+      box-shadow: 0 0 0 1px var(--border-strong);
+      overflow: hidden;
+    }
+
+    .card.pad { padding: 18px; }
+
+    .provider-card {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 16px;
+      padding: 18px;
+      cursor: pointer;
+      transition: transform .16s ease, background .16s ease;
+    }
+
+    .provider-card:hover { transform: translateY(-1px); }
+    .provider-card.selected { background: #fffdf8; box-shadow: inset 3px 0 0 var(--accent); }
+
+    .provider-top {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .provider-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      background: var(--white);
+      box-shadow: 0 0 0 1px var(--border-strong);
+      font: 600 15px/1 var(--font-display);
+    }
+
+    .provider-title strong {
+      display: block;
+      font-size: 16px;
+      letter-spacing: -0.01em;
+    }
+
+    .provider-title span {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .metric-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .pill {
+      display: inline-flex;
+      gap: 6px;
+      align-items: center;
+      padding: 5px 8px;
+      border-radius: 999px;
+      background: var(--white);
+      box-shadow: 0 0 0 1px var(--border);
+      color: var(--muted);
+      font: 12px/1.2 var(--font-mono);
+    }
+
+    .pill.ok { color: var(--green); }
+    .pill.warn { color: var(--amber); }
+
+    .switch {
+      --on: 0;
+      width: 42px;
+      height: 24px;
+      border: 0;
+      border-radius: 999px;
+      padding: 2px;
+      background: color-mix(in srgb, var(--border-strong), var(--green) calc(var(--on) * 65%));
+      box-shadow: inset 0 0 0 1px rgba(20,20,19,.08);
+      cursor: pointer;
+    }
+
+    .switch::before {
+      content: "";
+      display: block;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--white);
+      box-shadow: 0 1px 4px rgba(20,20,19,.16);
+      transform: translateX(calc(var(--on) * 18px));
+      transition: transform .16s ease;
+    }
+
+    .switch[aria-checked="true"] { --on: 1; }
+
+    .detail {
+      padding: 18px;
+    }
+
+    .detail h3, .card h3 {
+      margin: 0;
+      font: 500 25px/1.12 var(--font-display);
+      letter-spacing: -0.02em;
+    }
+
+    .detail p, .card p {
+      color: var(--muted);
+    }
+
+    .raw {
+      margin-top: 14px;
+      padding: 14px;
+      border-radius: 12px;
+      background: var(--dark);
+      color: #ede9db;
+      font: 12px/1.55 var(--font-mono);
+      overflow: auto;
+    }
+
+    .raw .key { color: #f1b099; }
+    .raw .string { color: #d9d2b7; }
+
+    .model-list {
+      display: grid;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .model-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      align-items: center;
+      padding: 12px;
+      border-radius: 12px;
+      background: var(--white);
+      box-shadow: 0 0 0 1px var(--border);
+    }
+
+    .model-row strong {
+      display: block;
+      font: 13px/1.25 var(--font-mono);
+    }
+
+    .model-row span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .route-map {
+      display: grid;
+      grid-template-columns: 1fr 34px 1fr 34px 1fr;
+      gap: 10px;
+      align-items: stretch;
+      margin-top: 14px;
+    }
+
+    .route-node {
+      min-height: 116px;
+      padding: 14px;
+      border-radius: 14px;
+      background: var(--white);
+      box-shadow: 0 0 0 1px var(--border-strong);
+    }
+
+    .route-node .label {
+      color: var(--stone);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .route-node strong {
+      display: block;
+      margin-top: 9px;
+      font-size: 15px;
+    }
+
+    .route-node code {
+      display: block;
+      margin-top: 8px;
+      color: var(--muted);
+      font: 12px/1.45 var(--font-mono);
+    }
+
+    .arrow {
+      align-self: center;
+      text-align: center;
+      color: var(--stone);
+      font-size: 22px;
+    }
+
+    .endpoint-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+
+    .field {
+      display: grid;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .field label {
+      font-size: 12px;
+      color: var(--muted);
+      letter-spacing: 0.02em;
+    }
+
+    .field input {
+      width: 100%;
+      border: 0;
+      border-radius: 12px;
+      padding: 11px 12px;
+      background: var(--white);
+      color: var(--fg);
+      box-shadow: 0 0 0 1px var(--border-strong);
+      outline: none;
+      font-family: var(--font-mono);
+      font-size: 13px;
+    }
+
+    .field input:focus { box-shadow: 0 0 0 2px #3898ec; }
+
+    .endpoint {
+      padding: 14px;
+      border-radius: 14px;
+      background: var(--white);
+      box-shadow: 0 0 0 1px var(--border);
+    }
+
+    .endpoint strong {
+      display: block;
+      font: 13px/1.25 var(--font-mono);
+    }
+
+    .endpoint span {
+      display: block;
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .table {
+      margin-top: 14px;
+      border-radius: 14px;
+      overflow: hidden;
+      box-shadow: 0 0 0 1px var(--border-strong);
+    }
+
+    .table-row {
+      display: grid;
+      grid-template-columns: 1.2fr .8fr .8fr;
+      gap: 12px;
+      align-items: center;
+      padding: 11px 14px;
+      background: var(--white);
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+    }
+
+    .table-row:last-child { border-bottom: 0; }
+    .table-head {
+      background: #efede3;
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .mono { font-family: var(--font-mono); }
+
+    .network-preview {
+      margin-top: 16px;
+      padding: 18px;
+      border-radius: 16px;
+      background: var(--dark);
+      color: var(--surface);
+    }
+
+    .network-preview .label {
+      color: var(--silver);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .network-preview code {
+      display: block;
+      margin-top: 10px;
+      color: #ede9db;
+      font: 13px/1.6 var(--font-mono);
+      word-break: break-word;
+    }
+
+    .install-list { display: grid; gap: 10px; margin-top: 14px; }
+    .install-row { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; padding: 12px; border-radius: 12px; background: var(--white); box-shadow: 0 0 0 1px var(--border); }
+    .install-row small { display: block; color: var(--muted); margin-top: 2px; }
+
+    @media (max-width: 980px) {
+      .stage { padding: 14px; }
+      .app-window { height: auto; min-height: 0; }
+      .titlebar { grid-template-columns: 120px 1fr; }
+      .global-status { display: none; }
+      .shell { grid-template-columns: 1fr; }
+      .sidebar { display: none; }
+      .pane { padding: 18px; }
+      .content-grid, .endpoint-grid { grid-template-columns: 1fr; }
+      .route-map { grid-template-columns: 1fr; }
+      .arrow { transform: rotate(90deg); }
+      .pane-head { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <div class="app-window" data-od-id="macos-prototype">
+      <header class="titlebar">
+        <div class="traffic" aria-hidden="true">
+          <span class="dot red"></span>
+          <span class="dot yellow"></span>
+          <span class="dot green"></span>
+        </div>
+        <div class="window-title">osmBroker · Local AI routing server</div>
+        <div class="global-status"><span class="pulse"></span><span id="globalStatus">Broadcasting on 192.168.1.18:8080</span></div>
+      </header>
+
+      <div class="shell">
+        <aside class="sidebar">
+          <div class="brand">
+            <h1>osmBroker</h1>
+            <p>Menu-bar daemon and configuration console for terminal-native AI CLIs.</p>
+          </div>
+
+          <nav class="nav" aria-label="Primary">
+            <button class="active" data-pane-target="active"><span>●</span><span>Active</span><span class="count">3</span></button>
+            <button data-pane-target="routing"><span>⇄</span><span>Routing</span><span class="count" id="enabledCount">5</span></button>
+            <button data-pane-target="network"><span>⌁</span><span>Network</span><span class="count">ON</span></button>
+          </nav>
+
+          <div class="sidebar-card">
+            <div class="label">Base API URL</div>
+            <strong id="sideUrl">http://192.168.1.18:8080</strong>
+            <code>Authorization: Bearer sk-osm-local-auth</code>
+          </div>
+        </aside>
+
+        <main>
+          <section class="pane active" id="pane-active" data-od-id="active-dashboard">
+            <div class="pane-head">
+              <div>
+                <p class="eyebrow">Native process monitor</p>
+                <h2>Running CLIs, detected instantly.</h2>
+                <p class="lede">libproc-style process discovery surfaces terminal multiplexers and daemon signatures as soon as Codex, Claude, Gemini, or Kimi processes appear.</p>
+              </div>
+              <div class="toolbar">
+                <button class="secondary-btn">Rescan</button>
+                <button class="primary-btn">Start broker</button>
+              </div>
+            </div>
+
+            <div class="content-grid">
+              <div class="stack">
+                <article class="card provider-card selected" data-provider="codex">
+                  <div>
+                    <div class="provider-top">
+                      <div class="provider-icon">Cx</div>
+                      <div class="provider-title">
+                        <strong>Codex CLI</strong>
+                        <span>Interactive TUI + virtual model routing</span>
+                      </div>
+                    </div>
+                    <div class="metric-row">
+                      <span class="pill ok">pid 48231</span>
+                      <span class="pill">312 MB</span>
+                      <span class="pill">stdin bridge</span>
+                      <span class="pill ok">2 models enabled</span>
+                    </div>
+                  </div>
+                  <button class="switch" aria-label="Toggle Codex provider" aria-checked="true"></button>
+                </article>
+
+                <article class="card provider-card" data-provider="claude">
+                  <div>
+                    <div class="provider-top">
+                      <div class="provider-icon">Cl</div>
+                      <div class="provider-title">
+                        <strong>Claude Code</strong>
+                        <span>Local MCP integration + project tools</span>
+                      </div>
+                    </div>
+                    <div class="metric-row">
+                      <span class="pill ok">pid 51904</span>
+                      <span class="pill">428 MB</span>
+                      <span class="pill">socket bridge</span>
+                      <span class="pill ok">2 models enabled</span>
+                    </div>
+                  </div>
+                  <button class="switch" aria-label="Toggle Claude provider" aria-checked="true"></button>
+                </article>
+
+                <article class="card provider-card" data-provider="gemini">
+                  <div>
+                    <div class="provider-top">
+                      <div class="provider-icon">Gm</div>
+                      <div class="provider-title">
+                        <strong>Gemini CLI</strong>
+                        <span>Open-source ReAct loop architecture</span>
+                      </div>
+                    </div>
+                    <div class="metric-row">
+                      <span class="pill ok">pid 52618</span>
+                      <span class="pill">284 MB</span>
+                      <span class="pill">stdout stream</span>
+                      <span class="pill warn">1 model enabled</span>
+                    </div>
+                  </div>
+                  <button class="switch" aria-label="Toggle Gemini provider" aria-checked="true"></button>
+                </article>
+              </div>
+
+              <aside class="card detail" data-od-id="provider-metadata">
+                <p class="eyebrow">Selected provider</p>
+                <h3 id="providerName">Codex CLI</h3>
+                <p id="providerCopy">Documentation snippets show gpt-5.5 reasoning capability flags, feature listing support, and the models authorized for local routing.</p>
+                <div class="raw" id="providerRaw"><span class="key">binary</span>: <span class="string">"codex"</span>
+<span class="key">pid</span>: 48231
+<span class="key">memory</span>: <span class="string">"312 MB"</span>
+<span class="key">features</span>: [<span class="string">"codex features list"</span>, <span class="string">"virtual model routing"</span>]
+<span class="key">authorized_models</span>: [<span class="string">"gpt-5.5"</span>, <span class="string">"gpt-5.4-mini"</span>]</div>
+
+                <div class="model-list" id="activeModels"></div>
+              </aside>
+            </div>
+          </section>
+
+          <section class="pane" id="pane-routing" data-od-id="routing-map">
+            <div class="pane-head">
+              <div>
+                <p class="eyebrow">Translation layer</p>
+                <h2>One JSON request, three CLI dialects.</h2>
+                <p class="lede">Every enabled model gets a translation map from OpenAI or Anthropic-style JSON into the stdin, socket, or stdout stream that provider expects.</p>
+              </div>
+              <div class="toolbar">
+                <button class="secondary-btn">Export map</button>
+                <button class="primary-btn">Apply routes</button>
+              </div>
+            </div>
+
+            <div class="card pad">
+              <h3>Request path</h3>
+              <div class="route-map">
+                <div class="route-node">
+                  <div class="label">Ingress</div>
+                  <strong>/v1/chat/completions</strong>
+                  <code>{ model, messages, stream }</code>
+                </div>
+                <div class="arrow">→</div>
+                <div class="route-node">
+                  <div class="label">osmBroker</div>
+                  <strong>Translate + fan out</strong>
+                  <code>OpenAI SSE ⇄ CLI stream</code>
+                </div>
+                <div class="arrow">→</div>
+                <div class="route-node">
+                  <div class="label">Provider</div>
+                  <strong id="routeTarget">codex --model gpt-5.5</strong>
+                  <code>stdin in · stdout out</code>
+                </div>
+              </div>
+            </div>
+
+            <div class="content-grid" style="margin-top:18px">
+              <section class="card pad">
+                <h3>Model toggles</h3>
+                <p>Switch models on or off independently. The combined list becomes the dynamic response for <span class="mono">/v1/models</span>.</p>
+                <div class="model-list" id="routingModels"></div>
+              </section>
+
+              <section class="card pad">
+                <h3>SSE compatibility</h3>
+                <p>Outgoing events are normalized for clients expecting OpenAI or Anthropic streaming contracts.</p>
+                <div class="table">
+                  <div class="table-row table-head"><span>Event</span><span>OpenAI</span><span>Anthropic</span></div>
+                  <div class="table-row"><span class="mono">message_start</span><span>created</span><span>message_start</span></div>
+                  <div class="table-row"><span class="mono">delta</span><span>choices[].delta</span><span>content_block_delta</span></div>
+                  <div class="table-row"><span class="mono">done</span><span>[DONE]</span><span>message_stop</span></div>
+                </div>
+              </section>
+            </div>
+          </section>
+
+          <section class="pane" id="pane-network" data-od-id="network-configuration">
+            <div class="pane-head">
+              <div>
+                <p class="eyebrow">Local broadcasting</p>
+                <h2>Expose the host Mac as an AI router.</h2>
+                <p class="lede">Bind to localhost for private use, or to 0.0.0.0 when you want phones, laptops, or lab machines on the same network to call the broker.</p>
+              </div>
+              <div class="toolbar">
+                <button class="secondary-btn">Test key</button>
+                <button class="primary-btn">Save network</button>
+              </div>
+            </div>
+
+            <div class="content-grid">
+              <section class="card pad">
+                <h3>Binding</h3>
+                <div class="endpoint-grid">
+                  <div class="field">
+                    <label for="host">Host</label>
+                    <input id="host" value="0.0.0.0" />
+                  </div>
+                  <div class="field">
+                    <label for="port">Port</label>
+                    <input id="port" value="8080" />
+                  </div>
+                  <div class="field">
+                    <label for="key">API key</label>
+                    <input id="key" value="sk-osm-local-auth" />
+                  </div>
+                </div>
+
+                <div class="network-preview">
+                  <div class="label">Client configuration</div>
+                  <code id="curlPreview">curl http://192.168.1.18:8080/v1/models -H "Authorization: Bearer sk-osm-local-auth"</code>
+                </div>
+              </section>
+
+              <aside class="card pad">
+                <h3>Endpoint emulation</h3>
+                <div class="install-list">
+                  <div class="endpoint">
+                    <strong>/v1/models</strong>
+                    <span>Returns the merged model catalog from enabled CLI providers.</span>
+                  </div>
+                  <div class="endpoint">
+                    <strong>/v1/chat/completions</strong>
+                    <span>Accepts streaming inference requests and returns normalized SSE.</span>
+                  </div>
+                  <div class="endpoint">
+                    <strong>Bearer token required</strong>
+                    <span>Rejects requests without the configured local API key.</span>
+                  </div>
+                </div>
+              </aside>
+            </div>
+
+            <section class="card pad" style="margin-top:18px">
+              <h3>Fallback launchers</h3>
+              <div class="install-list">
+                <div class="install-row"><div><strong>Codex CLI</strong><small>Launch interactive TUI mode and expose eligible models.</small></div><button class="secondary-btn">Open</button></div>
+                <div class="install-row"><div><strong>Claude Code</strong><small>Start local MCP-aware agent session for project routing.</small></div><button class="secondary-btn">Open</button></div>
+                <div class="install-row"><div><strong>Gemini CLI</strong><small>Start ReAct loop provider and stream stdout through osmBroker.</small></div><button class="secondary-btn">Open</button></div>
+              </div>
+            </section>
+          </section>
+        </main>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const providers = {
+      codex: {
+        name: "Codex CLI",
+        copy: "Documentation snippets show gpt-5.5 reasoning capability flags, feature listing support, and the models authorized for local routing.",
+        raw: `<span class="key">binary</span>: <span class="string">"codex"</span>
+<span class="key">pid</span>: 48231
+<span class="key">memory</span>: <span class="string">"312 MB"</span>
+<span class="key">features</span>: [<span class="string">"codex features list"</span>, <span class="string">"virtual model routing"</span>]
+<span class="key">authorized_models</span>: [<span class="string">"gpt-5.5"</span>, <span class="string">"gpt-5.4-mini"</span>]`,
+        models: ["gpt-5.5", "gpt-5.4-mini"]
+      },
+      claude: {
+        name: "Claude Code",
+        copy: "Local MCP discovery is presented as a socket-backed provider with tool context and Anthropic-compatible streaming normalization.",
+        raw: `<span class="key">binary</span>: <span class="string">"claude"</span>
+<span class="key">pid</span>: 51904
+<span class="key">memory</span>: <span class="string">"428 MB"</span>
+<span class="key">transport</span>: <span class="string">"local socket"</span>
+<span class="key">authorized_models</span>: [<span class="string">"claude-3-7-sonnet"</span>, <span class="string">"claude-3-5-haiku"</span>]`,
+        models: ["claude-3-7-sonnet", "claude-3-5-haiku"]
+      },
+      gemini: {
+        name: "Gemini CLI",
+        copy: "The ReAct loop is mapped as a stdout provider, keeping the terminal-native agent flow while exposing a standard API contract.",
+        raw: `<span class="key">binary</span>: <span class="string">"gemini"</span>
+<span class="key">pid</span>: 52618
+<span class="key">memory</span>: <span class="string">"284 MB"</span>
+<span class="key">architecture</span>: <span class="string">"ReAct loop"</span>
+<span class="key">authorized_models</span>: [<span class="string">"gemini-3-pro"</span>]`,
+        models: ["gemini-3-pro"]
+      }
+    };
+
+    const modelState = {
+      "gpt-5.5": true,
+      "gpt-5.4-mini": true,
+      "claude-3-7-sonnet": true,
+      "claude-3-5-haiku": true,
+      "gemini-3-pro": true
+    };
+
+    const providerName = document.getElementById("providerName");
+    const providerCopy = document.getElementById("providerCopy");
+    const providerRaw = document.getElementById("providerRaw");
+    const activeModels = document.getElementById("activeModels");
+    const routingModels = document.getElementById("routingModels");
+    const enabledCount = document.getElementById("enabledCount");
+    const routeTarget = document.getElementById("routeTarget");
+
+    function modelRow(model, provider) {
+      const checked = modelState[model] ? "true" : "false";
+      return `<div class="model-row">
+        <div><strong>${model}</strong><span>${provider.name} · SSE normalized</span></div>
+        <button class="switch model-switch" data-model="${model}" aria-label="Toggle ${model}" aria-checked="${checked}"></button>
+      </div>`;
+    }
+
+    function renderActiveModels(providerKey) {
+      activeModels.innerHTML = providers[providerKey].models.map((model) => modelRow(model, providers[providerKey])).join("");
+      bindModelSwitches();
+    }
+
+    function renderRoutingModels() {
+      routingModels.innerHTML = Object.entries(providers)
+        .flatMap(([key, provider]) => provider.models.map((model) => modelRow(model, provider)))
+        .join("");
+      const enabled = Object.values(modelState).filter(Boolean).length;
+      enabledCount.textContent = String(enabled);
+      const firstEnabled = Object.keys(modelState).find((model) => modelState[model]) || "no enabled model";
+      routeTarget.textContent = firstEnabled === "no enabled model" ? firstEnabled : `${providerForModel(firstEnabled)} --model ${firstEnabled}`;
+      bindModelSwitches();
+    }
+
+    function providerForModel(model) {
+      return Object.entries(providers).find(([, provider]) => provider.models.includes(model))?.[0] || "provider";
+    }
+
+    function bindModelSwitches() {
+      document.querySelectorAll(".model-switch").forEach((button) => {
+        button.onclick = () => {
+          const model = button.dataset.model;
+          modelState[model] = !modelState[model];
+          renderRoutingModels();
+          const selected = document.querySelector(".provider-card.selected")?.dataset.provider || "codex";
+          renderActiveModels(selected);
+        };
+      });
+    }
+
+    document.querySelectorAll("[data-pane-target]").forEach((button) => {
+      button.addEventListener("click", () => {
+        document.querySelectorAll("[data-pane-target]").forEach((item) => item.classList.remove("active"));
+        document.querySelectorAll(".pane").forEach((pane) => pane.classList.remove("active"));
+        button.classList.add("active");
+        document.getElementById(`pane-${button.dataset.paneTarget}`).classList.add("active");
+      });
+    });
+
+    document.querySelectorAll(".provider-card").forEach((card) => {
+      card.addEventListener("click", (event) => {
+        if (event.target.closest(".switch")) return;
+        const providerKey = card.dataset.provider;
+        const provider = providers[providerKey];
+        document.querySelectorAll(".provider-card").forEach((item) => item.classList.remove("selected"));
+        card.classList.add("selected");
+        providerName.textContent = provider.name;
+        providerCopy.textContent = provider.copy;
+        providerRaw.innerHTML = provider.raw;
+        renderActiveModels(providerKey);
+      });
+    });
+
+    document.querySelectorAll(".provider-card > .switch").forEach((button) => {
+      button.addEventListener("click", () => {
+        button.setAttribute("aria-checked", button.getAttribute("aria-checked") !== "true");
+      });
+    });
+
+    const host = document.getElementById("host");
+    const port = document.getElementById("port");
+    const key = document.getElementById("key");
+    const curlPreview = document.getElementById("curlPreview");
+    const sideUrl = document.getElementById("sideUrl");
+    const globalStatus = document.getElementById("globalStatus");
+
+    function syncNetworkPreview() {
+      const displayHost = host.value === "0.0.0.0" ? "192.168.1.18" : host.value;
+      const base = `http://${displayHost}:${port.value}`;
+      sideUrl.textContent = base;
+      globalStatus.textContent = `Broadcasting on ${displayHost}:${port.value}`;
+      curlPreview.textContent = `curl ${base}/v1/models -H "Authorization: Bearer ${key.value}"`;
+    }
+
+    [host, port, key].forEach((input) => input.addEventListener("input", syncNetworkPreview));
+
+    renderActiveModels("codex");
+    renderRoutingModels();
+  </script>
+</body>
+</html>

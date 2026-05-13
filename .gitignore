@@ -1,0 +1,23 @@
+# SwiftPM build products
+.build/
+.swiftpm/
+
+# Generated app bundle (rebuild via Scripts/make-app-bundle.sh)
+osmBroker.app/
+
+# macOS noise
+.DS_Store
+
+# IDE / editor metadata
+.vscode/
+.idea/
+*.xcodeproj/
+*.xcworkspace/
+
+# Local Obsidian state (keep the notes; drop the workspace cache)
+docs/osmBroker/.obsidian/workspace*
+docs/osmBroker/.obsidian/cache
+
+# Local test scratch
+/tmp/
+*.log
