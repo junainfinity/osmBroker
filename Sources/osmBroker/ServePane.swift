@@ -54,6 +54,7 @@ struct ServePane: View {
 
                 BaseURLCard()
                 PortAndKeyCard()
+                ModelsServedCard()
                 EndpointEmulationCard()
             }
             .padding(28)
@@ -196,6 +197,287 @@ private struct Field: View {
                 }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+// MARK: - Models served card
+//
+// Shows the exact model IDs the broker is currently exposing under each CLI,
+// grouped by the originating agent. The point is to be unambiguous: if a user
+// is configuring AnythingLLM / Open WebUI / Claude Desktop / their own code,
+// they need to know the *exact* string to paste into the "model" field. The
+// broker doesn't translate aliases — what you see here is what gets matched.
+
+// File-private rather than nested-private so ServedAgentRow can name the type.
+fileprivate struct AgentBucket: Identifiable {
+    let agent: DetectedAgent
+    let enabledModels: [String]
+    var id: String { agent.id }
+}
+
+private struct ModelsServedCard: View {
+    @EnvironmentObject private var state: AppState
+
+    /// Walks every installed agent, pulls its currently-exposed (enabled) model
+    /// IDs, and drops agents with zero enabled models. Order matches the
+    /// sidebar so the visual hierarchy is consistent.
+    private var buckets: [AgentBucket] {
+        state.installedAgents.compactMap { agent in
+            let enabled = state.modelsFor(agent)
+                .filter { state.modelExposed[$0] ?? false }
+            return enabled.isEmpty ? nil : AgentBucket(agent: agent, enabledModels: enabled)
+        }
+    }
+
+    var body: some View {
+        CardSurface(padded: true) {
+            VStack(alignment: .leading, spacing: 14) {
+                SectionTitle(text: "Models served")
+
+                if buckets.isEmpty {
+                    EmptyModelsHint()
+                } else {
+                    Text("These are the exact strings to paste into the **model** field of any OpenAI-compatible client (AnythingLLM, Open WebUI, LiteLLM, your own code). Grouped by which CLI on this Mac will actually handle the request.")
+                        .font(Theme.Typeface.body(12))
+                        .foregroundStyle(Theme.Palette.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    VStack(spacing: 12) {
+                        ForEach(buckets) { bucket in
+                            ServedAgentRow(bucket: bucket)
+                        }
+                    }
+
+                    ClientHints()
+                }
+            }
+        }
+    }
+}
+
+private struct ServedAgentRow: View {
+    let bucket: AgentBucket
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center, spacing: 10) {
+                Text(bucket.agent.def.monogram)
+                    .font(Theme.Typeface.body(11, weight: .semibold))
+                    .foregroundStyle(Theme.Palette.fg)
+                    .frame(width: 26, height: 22)
+                    .background(Theme.Palette.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .strokeBorder(Theme.Palette.borderStrong, lineWidth: 1)
+                    }
+                Text(bucket.agent.def.name)
+                    .font(Theme.Typeface.body(13, weight: .semibold))
+                    .foregroundStyle(Theme.Palette.fg)
+                Text("·")
+                    .foregroundStyle(Theme.Palette.muted)
+                Text(bucket.agent.def.nativeProtocol.rawValue + "-shape")
+                    .font(Theme.Typeface.body(11))
+                    .foregroundStyle(Theme.Palette.muted)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 2)
+                    .background(Theme.Palette.white)
+                    .clipShape(Capsule())
+                    .overlay {
+                        Capsule().strokeBorder(Theme.Palette.border, lineWidth: 1)
+                    }
+                Spacer(minLength: 0)
+                Text("\(bucket.enabledModels.count) model\(bucket.enabledModels.count == 1 ? "" : "s")")
+                    .font(Theme.Typeface.body(11))
+                    .foregroundStyle(Theme.Palette.muted)
+            }
+
+            // Wrap of model-ID chips. Each chip is its own copy button so the
+            // user can grab the exact string in one click.
+            FlowLayout(spacing: 6) {
+                ForEach(bucket.enabledModels, id: \.self) { modelID in
+                    ModelIDChip(text: modelID)
+                }
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.Palette.white)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.chunk, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Radius.chunk, style: .continuous)
+                .strokeBorder(Theme.Palette.border, lineWidth: 1)
+        }
+    }
+}
+
+private struct ModelIDChip: View {
+    let text: String
+    @State private var copied = false
+
+    var body: some View {
+        Button {
+            let pb = NSPasteboard.general
+            pb.clearContents()
+            pb.setString(text, forType: .string)
+            copied = true
+            Task {
+                try? await Task.sleep(nanoseconds: 1_200_000_000)
+                copied = false
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Text(text)
+                    .font(Theme.Typeface.mono(12))
+                    .foregroundStyle(Theme.Palette.fg)
+                Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(copied ? Theme.Palette.green : Theme.Palette.muted)
+            }
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
+            .background(Theme.Palette.white)
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .strokeBorder(Theme.Palette.borderStrong, lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Copy model ID \(text)")
+    }
+}
+
+private struct EmptyModelsHint: View {
+    var body: some View {
+        Text("No models are currently enabled. Open the **Models** tab and toggle on at least one per CLI.")
+            .font(Theme.Typeface.body(12))
+            .foregroundStyle(Theme.Palette.muted)
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Theme.Palette.white)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.chunk, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.Radius.chunk, style: .continuous)
+                    .strokeBorder(Theme.Palette.border, lineWidth: 1)
+            }
+    }
+}
+
+/// Tiny hint block telling users exactly which fields to fill in their client.
+private struct ClientHints: View {
+    @EnvironmentObject private var state: AppState
+
+    private struct Hint: Identifiable {
+        let id = UUID()
+        let client: String
+        let baseURLLabel: String
+        let modelLabel: String
+        let keyLabel: String
+    }
+
+    private let hints: [Hint] = [
+        Hint(client: "AnythingLLM",
+             baseURLLabel: "LLM Preference → Generic OpenAI → Base URL",
+             modelLabel: "Generic OpenAI → Chat Model Name",
+             keyLabel: "Generic OpenAI → API Key"),
+        Hint(client: "Open WebUI",
+             baseURLLabel: "Admin Panel → Connections → OpenAI API → Base URL",
+             modelLabel: "Pick from the dropdown — IDs above appear automatically",
+             keyLabel: "Admin Panel → Connections → OpenAI API → API Key"),
+        Hint(client: "LiteLLM proxy",
+             baseURLLabel: "config.yaml — model_list.litellm_params.api_base",
+             modelLabel: "config.yaml — model_list.litellm_params.model: openai/<id>",
+             keyLabel: "config.yaml — model_list.litellm_params.api_key"),
+        Hint(client: "OpenAI Python SDK",
+             baseURLLabel: "OpenAI(base_url=…)",
+             modelLabel: "client.chat.completions.create(model=\"<id>\")",
+             keyLabel: "OpenAI(api_key=…)"),
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("How to plug this into a client")
+                .font(Theme.Typeface.body(11, weight: .semibold))
+                .tracking(0.6)
+                .foregroundStyle(Theme.Palette.muted)
+
+            VStack(spacing: 10) {
+                ForEach(hints) { h in
+                    ClientHintRow(client: h.client,
+                                  baseURLLabel: h.baseURLLabel,
+                                  modelLabel: h.modelLabel,
+                                  keyLabel: h.keyLabel)
+                }
+            }
+        }
+        .padding(.top, 4)
+    }
+}
+
+private struct ClientHintRow: View {
+    @EnvironmentObject private var state: AppState
+    let client: String
+    let baseURLLabel: String
+    let modelLabel: String
+    let keyLabel: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(client)
+                .font(Theme.Typeface.body(12, weight: .semibold))
+                .foregroundStyle(Theme.Palette.fg)
+            HStack(alignment: .top, spacing: 6) {
+                Text("Base URL")
+                    .font(Theme.Typeface.body(11))
+                    .foregroundStyle(Theme.Palette.muted)
+                    .frame(width: 70, alignment: .leading)
+                Text(state.baseURL)
+                    .font(Theme.Typeface.mono(11))
+                    .foregroundStyle(Theme.Palette.fg)
+                Text("·")
+                    .foregroundStyle(Theme.Palette.muted)
+                Text(baseURLLabel)
+                    .font(Theme.Typeface.body(11))
+                    .foregroundStyle(Theme.Palette.muted)
+            }
+            HStack(alignment: .top, spacing: 6) {
+                Text("Model")
+                    .font(Theme.Typeface.body(11))
+                    .foregroundStyle(Theme.Palette.muted)
+                    .frame(width: 70, alignment: .leading)
+                Text("(any ID above)")
+                    .font(Theme.Typeface.mono(11))
+                    .foregroundStyle(Theme.Palette.fg)
+                Text("·")
+                    .foregroundStyle(Theme.Palette.muted)
+                Text(modelLabel)
+                    .font(Theme.Typeface.body(11))
+                    .foregroundStyle(Theme.Palette.muted)
+            }
+            HStack(alignment: .top, spacing: 6) {
+                Text("API key")
+                    .font(Theme.Typeface.body(11))
+                    .foregroundStyle(Theme.Palette.muted)
+                    .frame(width: 70, alignment: .leading)
+                Text(state.apiKey)
+                    .font(Theme.Typeface.mono(11))
+                    .foregroundStyle(Theme.Palette.fg)
+                Text("·")
+                    .foregroundStyle(Theme.Palette.muted)
+                Text(keyLabel)
+                    .font(Theme.Typeface.body(11))
+                    .foregroundStyle(Theme.Palette.muted)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.Palette.white)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(Theme.Palette.border, lineWidth: 1)
+        }
     }
 }
 
